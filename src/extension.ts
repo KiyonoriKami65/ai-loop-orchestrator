@@ -64,6 +64,14 @@ function exists(filePath: string): boolean {
   return fs.existsSync(filePath);
 }
 
+function shellQuote(value: string): string {
+  if (process.platform === "win32") {
+    return `"${value.replace(/[`"$]/g, "`$&")}"`;
+  }
+
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
 function stateFile(): string {
   return path.join(aiLoopRoot(), "state.json");
 }
@@ -486,12 +494,28 @@ function buildFinalReport(state: LoopState): string {
   return out;
 }
 
+const AUTO_REASON_PREFIX = "Auto: ";
+
+function resetAutoReasons(verdict: Verdict): void {
+  const reasons = Array.isArray(verdict.reason) ? verdict.reason : [];
+  verdict.reason = reasons.filter(
+    (reason) =>
+      !reason.startsWith(AUTO_REASON_PREFIX) &&
+      reason !== "Same issues repeated → forcing human review"
+  );
+}
+
+function pushAutoReason(verdict: Verdict, message: string): void {
+  verdict.reason = pushUniqueReason(verdict.reason, `${AUTO_REASON_PREFIX}${message}`);
+}
+
 function updateVerdictFromFiles(round: number): Verdict {
   const verdictPath = roundFile(round, "verdict.json");
   const verdict = exists(verdictPath) ? readJson<Verdict>(verdictPath) : defaultVerdict(round);
 
   verdict.requiresHumanReview = false;
   verdict.stopReason = "";
+  resetAutoReasons(verdict);
 
   const claudeReview = exists(roundFile(round, "claude_review.md"))
     ? readText(roundFile(round, "claude_review.md"))
@@ -531,14 +555,33 @@ function updateVerdictFromFiles(round: number): Verdict {
 
   verdict.shouldContinue = !isConverged(verdict);
 
+  if (isConverged(verdict)) {
+    pushAutoReason(verdict, "all convergence conditions are satisfied");
+  } else {
+    if (verdict.tests === "UNKNOWN") {
+      pushAutoReason(verdict, "project test result is UNKNOWN");
+    } else if (verdict.tests === "FAIL") {
+      pushAutoReason(verdict, "project test task failed");
+    }
+
+    if (verdict.claude === "PENDING") {
+      pushAutoReason(verdict, "Claude review is still PENDING");
+    } else if (verdict.claude === "BLOCKER") {
+      pushAutoReason(verdict, "Claude review reported BLOCKER");
+    }
+
+    if (verdict.copilot === "PENDING") {
+      pushAutoReason(verdict, "Copilot verify is still PENDING");
+    } else if (verdict.copilot === "NEEDS_FIX") {
+      pushAutoReason(verdict, "Copilot verify reported NEEDS_FIX");
+    }
+  }
+
   if (verdict.sameIssuesAsPreviousRound) {
     verdict.shouldContinue = false;
     verdict.requiresHumanReview = true;
     verdict.stopReason = "Same issues repeated";
-    verdict.reason = pushUniqueReason(
-      verdict.reason,
-      "Same issues repeated → forcing human review"
-    );
+    pushAutoReason(verdict, "same issues repeated; forcing human review");
   }
 
   writeJson(verdictPath, verdict);
@@ -697,9 +740,8 @@ async function runCodex(): Promise<void> {
 
     const terminal = vscode.window.createTerminal("AI Loop Codex");
     terminal.show();
-    terminal.sendText(
-      `codex exec "${targetInstruction} Write results to .ai-loop/rounds/${roundStr}/codex_result.md and .ai-loop/rounds/${roundStr}/patch_summary.md."`
-    );
+    const codexPrompt = `${targetInstruction} Write results to .ai-loop/rounds/${roundStr}/codex_result.md and .ai-loop/rounds/${roundStr}/patch_summary.md.`;
+    terminal.sendText(`codex exec ${shellQuote(codexPrompt)}`);
 
     vscode.window.showInformationMessage(
       `Codex 実行を開始しました。Round ${roundStr} の codex_result.md を確認してください。`

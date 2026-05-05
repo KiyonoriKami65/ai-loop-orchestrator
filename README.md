@@ -81,6 +81,9 @@ ai-loop-orchestrator/
    └─ images/
 ```
 
+`.ai-loop/spec.md` と `.ai-loop/agents/` はプロジェクトごとの設定として残す想定です。  
+`.ai-loop/rounds/` と `.ai-loop/final/` は実行ログなので、チームで共有しない場合は `.gitignore` のコメントを外して無視対象にしてください。
+
 ---
 
 ## クイックスタート
@@ -144,10 +147,33 @@ AI Loop: Converge
 npm install
 ```
 
+Windows で `node` / `npm` が PATH に無い場合は、まず実体を探します。
+
+```powershell
+Get-ChildItem -Path $env:ProgramFiles,${env:ProgramFiles(x86)},$env:LOCALAPPDATA,$env:APPDATA -Recurse -Filter node.exe -ErrorAction SilentlyContinue |
+  Select-Object -First 10 -ExpandProperty FullName
+
+Get-ChildItem -Path $env:ProgramFiles,${env:ProgramFiles(x86)},$env:LOCALAPPDATA,$env:APPDATA -Recurse -Filter npm.cmd -ErrorAction SilentlyContinue |
+  Select-Object -First 10 -ExpandProperty FullName
+```
+
+Node.js が通常の場所に入っているなら、PowerShell では一時的に PATH を足して実行できます。
+
+```powershell
+$env:Path = 'C:\Program Files\nodejs;' + $env:Path
+& 'C:\Program Files\nodejs\npm.cmd' install
+```
+
 ### コンパイル
 
 ```bash
 npm run compile
+```
+
+PATH を一時追加した場合は同じターミナルで実行します。
+
+```powershell
+& 'C:\Program Files\nodejs\npm.cmd' run compile
 ```
 
 開発中は watch も使えます。
