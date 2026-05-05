@@ -20,6 +20,7 @@
     "onCommand:aiLoop.runProjectTests",
     "onCommand:aiLoop.nextRound",
     "onCommand:aiLoop.converge",
+    "onCommand:aiLoop.selectAgents",
     "onCommand:aiLoop.openCurrentRound"
   ],
   "main": "./out/extension.js",
@@ -52,6 +53,10 @@
       {
         "command": "aiLoop.converge",
         "title": "AI Loop: Converge"
+      },
+      {
+        "command": "aiLoop.selectAgents",
+        "title": "AI Loop: Select Agents"
       },
       {
         "command": "aiLoop.openCurrentRound",

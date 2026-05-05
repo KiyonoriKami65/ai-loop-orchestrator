@@ -1,5 +1,9 @@
 export type LoopStatus = "idle" | "codex" | "claude" | "copilot" | "done";
 
+export type AgentId = "codex" | "claude" | "copilot";
+
+export type AgentSelection = Record<AgentId, boolean>;
+
 export type LoopState = {
   projectName: string;
   round: number;
@@ -9,6 +13,7 @@ export type LoopState = {
   lastVerdict: string;
   requiresHumanReview: boolean;
   stopReason: string;
+  agents: AgentSelection;
   updatedAt: string;
 };
 
@@ -34,7 +39,16 @@ export function defaultState(projectName: string): LoopState {
     lastVerdict: "PENDING",
     requiresHumanReview: false,
     stopReason: "",
+    agents: defaultAgentSelection(),
     updatedAt: new Date().toISOString()
+  };
+}
+
+export function defaultAgentSelection(): AgentSelection {
+  return {
+    codex: true,
+    claude: true,
+    copilot: true
   };
 }
 
@@ -135,10 +149,16 @@ export function pushUniqueReason(reasons: string[], message: string): string[] {
   return reasons;
 }
 
-export function isConverged(verdict: Verdict): boolean {
+export function isConverged(
+  verdict: Verdict,
+  agents: AgentSelection = defaultAgentSelection()
+): boolean {
+  const claudeOk = !agents.claude || verdict.claude === "OK" || verdict.claude === "NON_BLOCKER";
+  const copilotOk = !agents.copilot || verdict.copilot === "OK";
+
   return (
     verdict.tests === "PASS" &&
-    (verdict.claude === "OK" || verdict.claude === "NON_BLOCKER") &&
-    verdict.copilot === "OK"
+    claudeOk &&
+    copilotOk
   );
 }

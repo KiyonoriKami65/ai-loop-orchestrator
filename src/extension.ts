@@ -2,8 +2,11 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 import {
+  AgentId,
+  AgentSelection,
   LoopState,
   Verdict,
+  defaultAgentSelection,
   defaultState,
   defaultVerdict,
   detectSameIssues,
@@ -21,6 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("aiLoop.runProjectTests", runProjectTests),
     vscode.commands.registerCommand("aiLoop.nextRound", nextRound),
     vscode.commands.registerCommand("aiLoop.converge", converge),
+    vscode.commands.registerCommand("aiLoop.selectAgents", selectAgents),
     vscode.commands.registerCommand("aiLoop.openCurrentRound", openCurrentRound)
   );
 }
@@ -98,12 +102,87 @@ function currentRoundFile(name: string): string {
 }
 
 function loadState(): LoopState {
-  return readJson<LoopState>(stateFile());
+  return normalizeState(readJson<LoopState>(stateFile()));
 }
 
 function saveState(state: LoopState): void {
+  state.agents = normalizeAgentSelection(state.agents);
   state.updatedAt = new Date().toISOString();
   writeJson(stateFile(), state);
+}
+
+function normalizeState(state: LoopState): LoopState {
+  return {
+    ...state,
+    agents: normalizeAgentSelection(state.agents)
+  };
+}
+
+function normalizeAgentSelection(agents?: Partial<AgentSelection>): AgentSelection {
+  const defaults = defaultAgentSelection();
+  return {
+    codex: agents?.codex ?? defaults.codex,
+    claude: agents?.claude ?? defaults.claude,
+    copilot: agents?.copilot ?? defaults.copilot
+  };
+}
+
+function enabledAgentIds(agents: AgentSelection): AgentId[] {
+  return (Object.keys(agents) as AgentId[]).filter((agent) => agents[agent]);
+}
+
+function formatAgentSelection(agents: AgentSelection): string {
+  const labels: Record<AgentId, string> = {
+    codex: "Codex",
+    claude: "Claude",
+    copilot: "Copilot"
+  };
+  const selected = enabledAgentIds(agents).map((agent) => labels[agent]);
+  return selected.length > 0 ? selected.join(" / ") : "None";
+}
+
+async function pickAgents(current?: AgentSelection): Promise<AgentSelection | undefined> {
+  const selected = normalizeAgentSelection(current);
+  const items: Array<vscode.QuickPickItem & { id: AgentId }> = [
+    {
+      id: "codex",
+      label: "Codex",
+      description: "実装担当",
+      picked: selected.codex
+    },
+    {
+      id: "claude",
+      label: "Claude Code",
+      description: "レビュー担当",
+      picked: selected.claude
+    },
+    {
+      id: "copilot",
+      label: "GitHub Copilot",
+      description: "確認担当",
+      picked: selected.copilot
+    }
+  ];
+
+  const picked = await vscode.window.showQuickPick(items, {
+    canPickMany: true,
+    placeHolder: "このループで使う AI を選択してください"
+  });
+
+  if (!picked) {
+    return undefined;
+  }
+
+  if (picked.length === 0) {
+    vscode.window.showWarningMessage("少なくとも 1 つの AI を選択してください。");
+    return undefined;
+  }
+
+  return {
+    codex: picked.some((item) => item.id === "codex"),
+    claude: picked.some((item) => item.id === "claude"),
+    copilot: picked.some((item) => item.id === "copilot")
+  };
 }
 
 async function openFile(filePath: string): Promise<void> {
@@ -241,6 +320,20 @@ NOT_RUN
 `
     );
   }
+}
+
+function buildAcceptanceCriteria(agents: AgentSelection): string {
+  const lines = ["- 仕様を満たす", "- テストが通る"];
+
+  if (agents.claude) {
+    lines.push("- Claude review が BLOCKER でない");
+  }
+
+  if (agents.copilot) {
+    lines.push("- Copilot verify が OK になる");
+  }
+
+  return lines.join("\n");
 }
 
 function codexRoleTemplate(): string {
@@ -454,6 +547,7 @@ function buildFinalReport(state: LoopState): string {
   let out = `# Final Report
 
 - project: ${state.projectName}
+- agents: ${formatAgentSelection(state.agents)}
 - round: ${state.round}
 - status: ${state.status}
 - converged: ${state.converged}
@@ -509,9 +603,10 @@ function pushAutoReason(verdict: Verdict, message: string): void {
   verdict.reason = pushUniqueReason(verdict.reason, `${AUTO_REASON_PREFIX}${message}`);
 }
 
-function updateVerdictFromFiles(round: number): Verdict {
+function updateVerdictFromFiles(round: number, agents = defaultAgentSelection()): Verdict {
   const verdictPath = roundFile(round, "verdict.json");
   const verdict = exists(verdictPath) ? readJson<Verdict>(verdictPath) : defaultVerdict(round);
+  const selectedAgents = normalizeAgentSelection(agents);
 
   verdict.requiresHumanReview = false;
   verdict.stopReason = "";
@@ -525,8 +620,12 @@ function updateVerdictFromFiles(round: number): Verdict {
     ? readText(roundFile(round, "copilot_verify.md"))
     : "";
 
-  const claudeVerdict = parseVerdictFromMarkdown(claudeReview, ["BLOCKER", "NON_BLOCKER", "OK"]);
-  const copilotVerdict = parseVerdictFromMarkdown(copilotVerify, ["NEEDS_FIX", "OK"]);
+  const claudeVerdict = selectedAgents.claude
+    ? parseVerdictFromMarkdown(claudeReview, ["BLOCKER", "NON_BLOCKER", "OK"])
+    : null;
+  const copilotVerdict = selectedAgents.copilot
+    ? parseVerdictFromMarkdown(copilotVerify, ["NEEDS_FIX", "OK"])
+    : null;
 
   if (claudeVerdict) {
     verdict.claude = claudeVerdict as Verdict["claude"];
@@ -536,7 +635,7 @@ function updateVerdictFromFiles(round: number): Verdict {
     verdict.copilot = copilotVerdict as Verdict["copilot"];
   }
 
-  if (round > 1) {
+  if (round > 1 && (selectedAgents.claude || selectedAgents.copilot)) {
     const prevClaude = exists(roundFile(round - 1, "claude_review.md"))
       ? readText(roundFile(round - 1, "claude_review.md"))
       : "";
@@ -545,17 +644,20 @@ function updateVerdictFromFiles(round: number): Verdict {
       ? readText(roundFile(round - 1, "copilot_verify.md"))
       : "";
 
-    const sameClaudeRequired = detectSameIssues(prevClaude, claudeReview, "## Required Fixes");
-    const sameCopilotMicro = detectSameIssues(prevCopilot, copilotVerify, "## Micro Fix Suggestions");
+    const sameClaudeRequired =
+      selectedAgents.claude && detectSameIssues(prevClaude, claudeReview, "## Required Fixes");
+    const sameCopilotMicro =
+      selectedAgents.copilot &&
+      detectSameIssues(prevCopilot, copilotVerify, "## Micro Fix Suggestions");
 
     verdict.sameIssuesAsPreviousRound = sameClaudeRequired || sameCopilotMicro;
   } else {
     verdict.sameIssuesAsPreviousRound = false;
   }
 
-  verdict.shouldContinue = !isConverged(verdict);
+  verdict.shouldContinue = !isConverged(verdict, selectedAgents);
 
-  if (isConverged(verdict)) {
+  if (isConverged(verdict, selectedAgents)) {
     pushAutoReason(verdict, "all convergence conditions are satisfied");
   } else {
     if (verdict.tests === "UNKNOWN") {
@@ -564,13 +666,17 @@ function updateVerdictFromFiles(round: number): Verdict {
       pushAutoReason(verdict, "project test task failed");
     }
 
-    if (verdict.claude === "PENDING") {
+    if (!selectedAgents.claude) {
+      pushAutoReason(verdict, "Claude review is disabled for this loop");
+    } else if (verdict.claude === "PENDING") {
       pushAutoReason(verdict, "Claude review is still PENDING");
     } else if (verdict.claude === "BLOCKER") {
       pushAutoReason(verdict, "Claude review reported BLOCKER");
     }
 
-    if (verdict.copilot === "PENDING") {
+    if (!selectedAgents.copilot) {
+      pushAutoReason(verdict, "Copilot verify is disabled for this loop");
+    } else if (verdict.copilot === "PENDING") {
       pushAutoReason(verdict, "Copilot verify is still PENDING");
     } else if (verdict.copilot === "NEEDS_FIX") {
       pushAutoReason(verdict, "Copilot verify reported NEEDS_FIX");
@@ -635,7 +741,8 @@ async function executeTaskByNameWaitExit(taskName: string): Promise<number | und
 
 async function runOptionalTaskAndRefreshVerdict(
   taskName: string,
-  round: number
+  round: number,
+  agents: AgentSelection
 ): Promise<boolean> {
   const tasks = await vscode.tasks.fetchTasks();
   if (!tasks.some((t) => t.name === taskName)) {
@@ -643,7 +750,7 @@ async function runOptionalTaskAndRefreshVerdict(
   }
 
   const exitCode = await executeTaskByNameWaitExit(taskName);
-  const verdict = updateVerdictFromFiles(round);
+  const verdict = updateVerdictFromFiles(round, agents);
   await openFile(roundFile(round, "verdict.json"));
 
   if (exitCode === 0) {
@@ -661,16 +768,14 @@ async function runOptionalTaskAndRefreshVerdict(
 
 async function startLoop(): Promise<void> {
   try {
-    const projectName = await vscode.window.showInputBox({
-      prompt: "AI Loop の対象名",
-      placeHolder: "example-feature"
-    });
-
-    if (!projectName) {
-      return;
-    }
+    const projectName = path.basename(workspaceRoot());
 
     ensureTemplateFiles(projectName);
+    const agents = await pickAgents(defaultAgentSelection());
+
+    if (!agents) {
+      return;
+    }
 
     const spec = await vscode.window.showInputBox({
       prompt: "今回の仕様を1行で入力してください",
@@ -678,6 +783,7 @@ async function startLoop(): Promise<void> {
     });
 
     const state = defaultState(projectName);
+    state.agents = agents;
     saveState(state);
 
     if (spec && spec.trim()) {
@@ -692,10 +798,7 @@ ${projectName}
 ${spec.trim()}
 
 ## Acceptance Criteria
-- 仕様を満たす
-- テストが通る
-- Claude review が BLOCKER でない
-- Copilot verify が OK になる
+${buildAcceptanceCriteria(agents)}
 `
       );
     }
@@ -704,13 +807,42 @@ ${spec.trim()}
 
     await revealFiles([
       specFile(),
-      roundFile(1, "codex_prompt.md"),
+      ...(agents.codex ? [roundFile(1, "codex_prompt.md")] : []),
       roundFile(1, "verdict.json")
     ]);
 
     vscode.window.showInformationMessage(
-      "AI Loop を開始しました。次は「AI Loop: Run Codex」を実行してください。"
+      `AI Loop を開始しました。使用AI: ${formatAgentSelection(agents)}`
     );
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function selectAgents(): Promise<void> {
+  try {
+    if (!exists(stateFile())) {
+      vscode.window.showInformationMessage(
+        "先に「AI Loop: Start」でループを開始してください。"
+      );
+      return;
+    }
+
+    const state = loadState();
+    const agents = await pickAgents(state.agents);
+
+    if (!agents) {
+      return;
+    }
+
+    state.agents = agents;
+    saveState(state);
+
+    if (exists(roundFile(state.round, "verdict.json"))) {
+      updateVerdictFromFiles(state.round, agents);
+    }
+
+    vscode.window.showInformationMessage(`使用AIを更新しました: ${formatAgentSelection(agents)}`);
   } catch (error) {
     showError(error);
   }
@@ -719,6 +851,13 @@ ${spec.trim()}
 async function runCodex(): Promise<void> {
   try {
     const state = loadState();
+    if (!state.agents.codex) {
+      vscode.window.showInformationMessage(
+        "このループでは Codex が無効です。変更する場合は「AI Loop: Select Agents」を実行してください。"
+      );
+      return;
+    }
+
     state.status = "codex";
     saveState(state);
 
@@ -754,6 +893,14 @@ async function runCodex(): Promise<void> {
 async function runClaudeReview(): Promise<void> {
   try {
     const state = loadState();
+    if (!state.agents.claude) {
+      updateVerdictFromFiles(state.round, state.agents);
+      vscode.window.showInformationMessage(
+        "このループでは Claude review が無効です。変更する場合は「AI Loop: Select Agents」を実行してください。"
+      );
+      return;
+    }
+
     state.status = "claude";
     saveState(state);
 
@@ -771,7 +918,8 @@ async function runClaudeReview(): Promise<void> {
 
     const automated = await runOptionalTaskAndRefreshVerdict(
       "AI Loop: Claude Review",
-      state.round
+      state.round,
+      state.agents
     );
 
     if (!automated) {
@@ -787,6 +935,14 @@ async function runClaudeReview(): Promise<void> {
 async function runCopilotVerify(): Promise<void> {
   try {
     const state = loadState();
+    if (!state.agents.copilot) {
+      updateVerdictFromFiles(state.round, state.agents);
+      vscode.window.showInformationMessage(
+        "このループでは Copilot verify が無効です。変更する場合は「AI Loop: Select Agents」を実行してください。"
+      );
+      return;
+    }
+
     state.status = "copilot";
     saveState(state);
 
@@ -800,7 +956,8 @@ async function runCopilotVerify(): Promise<void> {
 
     const automated = await runOptionalTaskAndRefreshVerdict(
       "AI Loop: Copilot Verify",
-      state.round
+      state.round,
+      state.agents
     );
 
     if (!automated) {
@@ -829,6 +986,7 @@ async function runProjectTests(): Promise<void> {
       verdict.tests = "PASS";
       verdict.reason = pushUniqueReason(verdict.reason, "Project test task passed");
       writeJson(verdictPath, verdict);
+      updateVerdictFromFiles(state.round, state.agents);
       await openFile(verdictPath);
       vscode.window.showInformationMessage("テスト成功: verdict.tests = PASS に更新しました。");
       return;
@@ -838,6 +996,7 @@ async function runProjectTests(): Promise<void> {
       verdict.tests = "FAIL";
       verdict.reason = pushUniqueReason(verdict.reason, "Project test task failed");
       writeJson(verdictPath, verdict);
+      updateVerdictFromFiles(state.round, state.agents);
       await openFile(verdictPath);
       vscode.window.showWarningMessage("テスト失敗: verdict.tests = FAIL に更新しました。");
       return;
@@ -849,6 +1008,7 @@ async function runProjectTests(): Promise<void> {
       "Project test task not found or exit code unavailable"
     );
     writeJson(verdictPath, verdict);
+    updateVerdictFromFiles(state.round, state.agents);
     await openFile(verdictPath);
 
     vscode.window.showWarningMessage(
@@ -862,7 +1022,7 @@ async function runProjectTests(): Promise<void> {
 async function nextRound(): Promise<void> {
   try {
     const state = loadState();
-    const currentVerdict = updateVerdictFromFiles(state.round);
+    const currentVerdict = updateVerdictFromFiles(state.round, state.agents);
 
     if (currentVerdict.requiresHumanReview) {
       state.status = "done";
@@ -907,7 +1067,7 @@ async function nextRound(): Promise<void> {
     }
 
     state.round += 1;
-    state.status = "codex";
+    state.status = state.agents.codex ? "codex" : "idle";
     state.lastVerdict = "CONTINUE";
     state.requiresHumanReview = false;
     state.stopReason = "";
@@ -916,7 +1076,7 @@ async function nextRound(): Promise<void> {
     ensureRoundFiles(state.round);
 
     await revealFiles([
-      roundFile(state.round, "codex_prompt.md"),
+      ...(state.agents.codex ? [roundFile(state.round, "codex_prompt.md")] : []),
       roundFile(state.round, "verdict.json")
     ]);
 
@@ -942,6 +1102,7 @@ async function converge(): Promise<void> {
 
     writeJson(convergencePath, {
       projectName: state.projectName,
+      agents: state.agents,
       round: state.round,
       converged: state.converged,
       requiresHumanReview: state.requiresHumanReview,
@@ -964,10 +1125,11 @@ async function openCurrentRound(): Promise<void> {
     ensureRoundFiles(state.round);
 
     await revealFiles([
-      currentRoundFile("codex_prompt.md"),
-      currentRoundFile("codex_result.md"),
-      currentRoundFile("claude_review.md"),
-      currentRoundFile("copilot_verify.md"),
+      ...(state.agents.codex
+        ? [currentRoundFile("codex_prompt.md"), currentRoundFile("codex_result.md")]
+        : []),
+      ...(state.agents.claude ? [currentRoundFile("claude_review.md")] : []),
+      ...(state.agents.copilot ? [currentRoundFile("copilot_verify.md")] : []),
       currentRoundFile("verdict.json")
     ]);
   } catch (error) {

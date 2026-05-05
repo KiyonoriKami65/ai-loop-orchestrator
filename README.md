@@ -20,6 +20,8 @@
 | 批評 | Claude Code | 仕様逸脱・バグ・エッジケースの指摘 |
 | 確認 | GitHub Copilot | 動作確認・微修正提案 |
 
+使う AI は `AI Loop: Start` 時に選択できます。あとから `AI Loop: Select Agents` で変更することもできます。
+
 `.ai-loop/` 配下のファイルを共通インターフェースにすることで、次のことがやりやすくなります。
 
 - 同じタスクを複数 AI に順番に渡す
@@ -34,7 +36,7 @@
 - VS Code 拡張として動作
 - `.ai-loop/state.json` による状態管理
 - ラウンドごとのプロンプト・レビュー・判定ファイル生成
-- Codex / Claude / Copilot の役割分担
+- Codex / Claude / Copilot の選択式ロール分担
 - プロジェクト確認 task の終了結果を `verdict.json` に反映
 - 同一指摘の検出による無限ループ防止
 - 人間レビューへのエスカレーション（最大 6 ラウンド）
@@ -58,7 +60,7 @@ ai-loop-orchestrator/
 │  ├─ launch.json
 │  └─ tasks.json
 ├─ .ai-loop/
-│  ├─ state.json       # ループ状態
+│  ├─ state.json       # ループ状態・使用AI
 │  ├─ spec.md          # 仕様（AI Loop: Start 後に編集）
 │  ├─ agents/          # 各 AI の役割定義（カスタマイズ可）
 │  │  ├─ codex.md
@@ -106,12 +108,18 @@ npm run compile
 
 ### 3. このリポジトリを VS Code で開く
 
+AI Loop は、VS Code で開いているワークスペースフォルダを対象プロジェクトとして扱います。  
+既存プロジェクトでも、新しく作った空フォルダでもかまいません。空の VS Code ウィンドウではなく、必ず対象にしたいフォルダを開いてから実行してください。
+
 ### 4. `F5` を押す
 
 `Run Extension` が起動し、**Extension Development Host** という別の VS Code ウィンドウが開きます。
 
 > このプロジェクト自身にループを使いたい場合は、開いた新ウィンドウで  
 > **File → Open Folder** から `ai-loop-orchestrator` フォルダを開いてください。
+>
+> 別のプロジェクトに使う場合は、その対象プロジェクトのフォルダを開きます。  
+> 複数フォルダ workspace の場合は、先頭の workspace folder が対象になります。
 
 ### 5. コマンドパレットを開く
 
@@ -121,6 +129,8 @@ npm run compile
 
 ```text
 AI Loop: Start
+  → 使用AIを選択
+  → 開いているフォルダ名が projectName になる
   → spec.md を編集してゴールと完了条件を記述する  ← 必須
 AI Loop: Run Codex
 AI Loop: Run Claude Review
@@ -214,6 +224,7 @@ npm run watch
 | `AI Loop: Run Project Tests` | `AI Loop: Project Test` task を実行して `verdict.tests` を更新 |
 | `AI Loop: Next Round` | 継続 / 収束 / 人間レビューを判定 |
 | `AI Loop: Converge` | 最終レポートを生成 |
+| `AI Loop: Select Agents` | このループで使う AI を変更 |
 | `AI Loop: Open Current Round Files` | 現在ラウンドの主要ファイルを開く |
 
 ---
@@ -227,12 +238,18 @@ AI Loop: Start
 ```
 
 - `.ai-loop/` のテンプレートを準備
-- `state.json` を初期化
+- 開いている VS Code ワークスペースフォルダ名を対象プロジェクト名として `state.json` を初期化
+- 使用する AI を選択
 - `spec.md` を作成
 - ラウンド 001 を作成
 
+対象プロジェクト名は入力しません。VS Code で開いているフォルダ名が自動で使われます。  
+たとえば `D:\MyProj\my-app` を開いている場合、`projectName` は `my-app` になります。
+
 **開始後すぐに `.ai-loop/spec.md` を編集してください。**  
 `## Goal` にやりたいことを、`## Acceptance Criteria` に完了条件を書くと AI への指示が明確になります。
+
+選択しなかった Claude / Copilot は収束判定から外れます。たとえば Claude を外した場合、`claude_review.md` が `PENDING` のままでも `AI Loop: Next Round` の判定では待ちません。
 
 ### 2. Codex で実装
 
@@ -336,8 +353,8 @@ AI Loop: Converge
 以下をすべて満たした場合に「収束」と判定します。
 
 - `tests === PASS`
-- `claude === OK` または `NON_BLOCKER`
-- `copilot === OK`
+- Claude を有効にしている場合は `claude === OK` または `NON_BLOCKER`
+- Copilot を有効にしている場合は `copilot === OK`
 
 ### 人間レビューに移行する条件
 
