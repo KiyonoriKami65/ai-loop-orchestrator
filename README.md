@@ -55,7 +55,10 @@ ai-loop-orchestrator/
 ├─ tsconfig.json
 ├─ .gitignore
 ├─ src/
+│  ├─ core.ts
 │  └─ extension.ts
+├─ test/
+│  └─ core.test.js
 ├─ .vscode/
 │  ├─ launch.json
 │  └─ tasks.json
@@ -91,13 +94,19 @@ npm install
 npm run compile
 ```
 
-### 3. Open this repository in VS Code
+### 3. Run tests
 
-### 4. Press `F5`
+```bash
+npm test
+```
+
+### 4. Open this repository in VS Code
+
+### 5. Press `F5`
 
 `Run Extension` が起動し、Extension Development Host が開きます。
 
-### 5. Run commands in this order
+### 6. Run commands in this order
 
 ```text
 AI Loop: Start
@@ -132,6 +141,14 @@ npm install
 npm run compile
 ```
 
+### Test
+
+```bash
+npm test
+```
+
+`npm test` は TypeScript compile 後に、収束判定・verdict parser・same issues 検出などのコアロジックを検証します。
+
 開発中は watch も使えます。
 
 ```bash
@@ -161,8 +178,8 @@ npm run watch
 |---|---|
 | `AI Loop: Start` | ループを初期化し Round 001 を作る |
 | `AI Loop: Run Codex` | Codex に現在ラウンドの実装を依頼 |
-| `AI Loop: Run Claude Review` | Claude Code にレビューを依頼 |
-| `AI Loop: Run Copilot Verify` | Copilot に動作確認を依頼 |
+| `AI Loop: Run Claude Review` | Claude Code にレビューを依頼。任意 task `AI Loop: Claude Review` があれば実行 |
+| `AI Loop: Run Copilot Verify` | Copilot に動作確認を依頼。任意 task `AI Loop: Copilot Verify` があれば実行 |
 | `AI Loop: Run Project Tests` | テストを実行して `verdict.tests` を更新 |
 | `AI Loop: Next Round` | 継続 / 収束 / Human Review を判定 |
 | `AI Loop: Converge` | Final Report を生成 |
@@ -249,6 +266,15 @@ AI Loop: Converge
 - `codex` コマンドが通るか
 - `codex exec --help` が動くか
 
+### Claude / Copilot を自動実行したい
+
+`.vscode/tasks.json` に以下の名前の task を追加すると、各 command 実行時に自動で起動します。
+
+- `AI Loop: Claude Review`
+- `AI Loop: Copilot Verify`
+
+task が存在しない場合は、従来通り prompt / review / verdict ファイルを開いて手動更新を促します。
+
 ### テストが `UNKNOWN` のまま
 
 - `.vscode/tasks.json` に `AI Loop: Project Test` があるか
@@ -262,4 +288,4 @@ AI Loop: Converge
 
 ## Development Notes
 
-このテンプレートは **最小構成** です。今後、Webview Dashboard、diff 自動表示、adapter 分離、CI 連携などに発展させやすいように作ってあります。
+このテンプレートは **最小構成** です。VS Code command 層は `src/extension.ts`、収束判定などの純粋ロジックは `src/core.ts` に分けています。今後、Webview Dashboard、diff 自動表示、CI 連携などに発展させやすい構成です。

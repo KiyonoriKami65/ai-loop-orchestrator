@@ -1,33 +1,16 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-
-type LoopStatus = "idle" | "codex" | "claude" | "copilot" | "done";
-
-type LoopState = {
-  projectName: string;
-  round: number;
-  status: LoopStatus;
-  maxRounds: number;
-  converged: boolean;
-  openIssues: string[];
-  lastVerdict: string;
-  requiresHumanReview: boolean;
-  stopReason: string;
-  updatedAt: string;
-};
-
-type Verdict = {
-  round: number;
-  claude: "PENDING" | "BLOCKER" | "NON_BLOCKER" | "OK";
-  copilot: "PENDING" | "NEEDS_FIX" | "OK";
-  tests: "UNKNOWN" | "PASS" | "FAIL";
-  sameIssuesAsPreviousRound: boolean;
-  shouldContinue: boolean;
-  requiresHumanReview: boolean;
-  stopReason: string;
-  reason: string[];
-};
+import {
+  LoopState,
+  Verdict,
+  defaultState,
+  defaultVerdict,
+  detectSameIssues,
+  isConverged,
+  parseVerdictFromMarkdown,
+  pushUniqueReason
+} from "./core";
 
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
@@ -113,35 +96,6 @@ function loadState(): LoopState {
 function saveState(state: LoopState): void {
   state.updatedAt = new Date().toISOString();
   writeJson(stateFile(), state);
-}
-
-function defaultState(projectName: string): LoopState {
-  return {
-    projectName,
-    round: 1,
-    status: "codex",
-    maxRounds: 6,
-    converged: false,
-    openIssues: [],
-    lastVerdict: "PENDING",
-    requiresHumanReview: false,
-    stopReason: "",
-    updatedAt: new Date().toISOString()
-  };
-}
-
-function defaultVerdict(round: number): Verdict {
-  return {
-    round,
-    claude: "PENDING",
-    copilot: "PENDING",
-    tests: "UNKNOWN",
-    sameIssuesAsPreviousRound: false,
-    shouldContinue: true,
-    requiresHumanReview: false,
-    stopReason: "",
-    reason: []
-  };
 }
 
 async function openFile(filePath: string): Promise<void> {
@@ -528,80 +482,6 @@ function buildFinalReport(state: LoopState): string {
   return out;
 }
 
-function extractSection(markdown: string, heading: string): string {
-  const lines = markdown.split(/\r?\n/);
-  const startIndex = lines.findIndex(
-    (line) => line.trim().toLowerCase() === heading.trim().toLowerCase()
-  );
-
-  if (startIndex === -1) {
-    return "";
-  }
-
-  const collected: string[] = [];
-  for (let i = startIndex + 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^##\s+/.test(line)) {
-      break;
-    }
-    collected.push(line);
-  }
-
-  return collected.join("\n").trim();
-}
-
-function normalizeIssueText(text: string): string {
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => {
-      const lowered = line.toLowerCase();
-      return (
-        line !== "" &&
-        line !== "-" &&
-        line !== "*" &&
-        lowered !== "pending" &&
-        lowered !== "none" &&
-        lowered !== "n/a"
-      );
-    })
-    .join("\n")
-    .toLowerCase()
-    .replace(/[ \t]+/g, " ")
-    .trim();
-}
-
-function detectSameIssues(prevMarkdown: string, currentMarkdown: string, heading: string): boolean {
-  const prev = normalizeIssueText(extractSection(prevMarkdown, heading));
-  const current = normalizeIssueText(extractSection(currentMarkdown, heading));
-
-  if (!prev || !current) {
-    return false;
-  }
-
-  return prev === current;
-}
-
-function parseVerdictFromMarkdown(markdown: string, expected: string[]): string | null {
-  const verdictSection = extractSection(markdown, "## Verdict");
-  const normalized = verdictSection.toUpperCase();
-
-  for (const v of expected) {
-    if (normalized.includes(v.toUpperCase())) {
-      return v;
-    }
-  }
-
-  return null;
-}
-
-function pushUniqueReason(reasons: string[], message: string): string[] {
-  if (!reasons.includes(message)) {
-    reasons.push(message);
-  }
-  return reasons;
-}
-
 function updateVerdictFromFiles(round: number): Verdict {
   const verdictPath = roundFile(round, "verdict.json");
   const verdict = exists(verdictPath) ? readJson<Verdict>(verdictPath) : defaultVerdict(round);
@@ -645,11 +525,7 @@ function updateVerdictFromFiles(round: number): Verdict {
     verdict.sameIssuesAsPreviousRound = false;
   }
 
-  verdict.shouldContinue = !(
-    verdict.tests === "PASS" &&
-    (verdict.claude === "OK" || verdict.claude === "NON_BLOCKER") &&
-    verdict.copilot === "OK"
-  );
+  verdict.shouldContinue = !isConverged(verdict);
 
   if (verdict.sameIssuesAsPreviousRound) {
     verdict.shouldContinue = false;
@@ -708,6 +584,32 @@ async function executeTaskByNameWaitExit(taskName: string): Promise<number | und
       reject(error);
     }
   });
+}
+
+async function runOptionalTaskAndRefreshVerdict(
+  taskName: string,
+  round: number
+): Promise<boolean> {
+  const tasks = await vscode.tasks.fetchTasks();
+  if (!tasks.some((t) => t.name === taskName)) {
+    return false;
+  }
+
+  const exitCode = await executeTaskByNameWaitExit(taskName);
+  const verdict = updateVerdictFromFiles(round);
+  await openFile(roundFile(round, "verdict.json"));
+
+  if (exitCode === 0) {
+    vscode.window.showInformationMessage(
+      `${taskName} が成功しました。verdict を ${verdict.shouldContinue ? "継続" : "停止"} 判定に更新しました。`
+    );
+  } else if (typeof exitCode === "number") {
+    vscode.window.showWarningMessage(`${taskName} が失敗しました。出力を確認してください。`);
+  } else {
+    vscode.window.showWarningMessage(`${taskName} の終了コードを取得できませんでした。`);
+  }
+
+  return true;
 }
 
 async function startLoop(): Promise<void> {
@@ -817,9 +719,16 @@ async function runClaudeReview(): Promise<void> {
     terminal.show();
     terminal.sendText("git diff");
 
-    vscode.window.showInformationMessage(
-      "Claude Code に claude_prompt.md を読ませて、claude_review.md と verdict.json を更新してください。"
+    const automated = await runOptionalTaskAndRefreshVerdict(
+      "AI Loop: Claude Review",
+      state.round
     );
+
+    if (!automated) {
+      vscode.window.showInformationMessage(
+        "Claude Code に claude_prompt.md を読ませて、claude_review.md と verdict.json を更新してください。自動化する場合は task `AI Loop: Claude Review` を追加してください。"
+      );
+    }
   } catch (error) {
     showError(error);
   }
@@ -839,9 +748,16 @@ async function runCopilotVerify(): Promise<void> {
       roundFile(state.round, "verdict.json")
     ]);
 
-    vscode.window.showInformationMessage(
-      "Copilot に copilot_prompt.md を読ませて、copilot_verify.md と verdict.json を更新してください。"
+    const automated = await runOptionalTaskAndRefreshVerdict(
+      "AI Loop: Copilot Verify",
+      state.round
     );
+
+    if (!automated) {
+      vscode.window.showInformationMessage(
+        "Copilot に copilot_prompt.md を読ませて、copilot_verify.md と verdict.json を更新してください。自動化する場合は task `AI Loop: Copilot Verify` を追加してください。"
+      );
+    }
   } catch (error) {
     showError(error);
   }
