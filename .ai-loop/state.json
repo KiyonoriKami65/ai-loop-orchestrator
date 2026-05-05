@@ -1,0 +1,12 @@
+{
+  "projectName": "sample-project",
+  "round": 1,
+  "status": "idle",
+  "maxRounds": 6,
+  "converged": false,
+  "openIssues": [],
+  "lastVerdict": "PENDING",
+  "requiresHumanReview": false,
+  "stopReason": "",
+  "updatedAt": "2026-05-05T00:00:00.000Z"
+}

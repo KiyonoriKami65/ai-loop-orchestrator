@@ -1,0 +1,71 @@
+{
+  "name": "ai-loop-orchestrator",
+  "displayName": "AI Loop Orchestrator",
+  "description": "File-driven multi-AI review loop orchestrator for VS Code",
+  "version": "0.1.1",
+  "publisher": "local",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:aiLoop.start",
+    "onCommand:aiLoop.runCodex",
+    "onCommand:aiLoop.runClaudeReview",
+    "onCommand:aiLoop.runCopilotVerify",
+    "onCommand:aiLoop.runProjectTests",
+    "onCommand:aiLoop.nextRound",
+    "onCommand:aiLoop.converge",
+    "onCommand:aiLoop.openCurrentRound"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aiLoop.start",
+        "title": "AI Loop: Start"
+      },
+      {
+        "command": "aiLoop.runCodex",
+        "title": "AI Loop: Run Codex"
+      },
+      {
+        "command": "aiLoop.runClaudeReview",
+        "title": "AI Loop: Run Claude Review"
+      },
+      {
+        "command": "aiLoop.runCopilotVerify",
+        "title": "AI Loop: Run Copilot Verify"
+      },
+      {
+        "command": "aiLoop.runProjectTests",
+        "title": "AI Loop: Run Project Tests"
+      },
+      {
+        "command": "aiLoop.nextRound",
+        "title": "AI Loop: Next Round"
+      },
+      {
+        "command": "aiLoop.converge",
+        "title": "AI Loop: Converge"
+      },
+      {
+        "command": "aiLoop.openCurrentRound",
+        "title": "AI Loop: Open Current Round Files"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/vscode": "^1.100.0",
+    "typescript": "^5.8.3"
+  }
+}

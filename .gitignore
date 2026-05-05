@@ -1,0 +1,22 @@
+node_modules/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+.vscode-test/
+.history/
+.DS_Store
+Thumbs.db
+*.vsix
+*.zip
+*.tgz
+.env
+.env.*
+!.env.example
+logs/
+*.log
+tmp/
+temp/
+.cache/
+# .ai-loop/rounds/
+# .ai-loop/final/
