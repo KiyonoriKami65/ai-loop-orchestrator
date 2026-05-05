@@ -2,9 +2,23 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "npm: compile",
+      "type": "shell",
+      "command": "$npmCandidates = @('C:\\Program Files\\nodejs\\npm.cmd', 'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm.cmd'); $npm = $npmCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if ($npm) { $nodeDir = Split-Path -Parent $npm; if ($nodeDir -like '*\\node_modules\\npm\\bin') { $nodeDir = 'C:\\Program Files\\nodejs' }; $env:Path = $nodeDir + ';' + $env:Path; & $npm run compile } else { npm run compile }",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      }
+    },
+    {
       "label": "AI Loop: Project Test",
       "type": "shell",
-      "command": "npm run compile",
+      "command": "$npmCandidates = @('C:\\Program Files\\nodejs\\npm.cmd', 'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm.cmd'); $npm = $npmCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if ($npm) { $nodeDir = Split-Path -Parent $npm; if ($nodeDir -like '*\\node_modules\\npm\\bin') { $nodeDir = 'C:\\Program Files\\nodejs' }; $env:Path = $nodeDir + ';' + $env:Path; & $npm run compile } else { npm run compile }",
       "options": {
         "cwd": "${workspaceFolder}"
       },
