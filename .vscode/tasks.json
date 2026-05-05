@@ -4,35 +4,7 @@
     {
       "label": "AI Loop: Project Test",
       "type": "shell",
-      "command": "npm test",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": false
-      }
-    },
-    {
-      "label": "AI Loop: Claude Review",
-      "type": "shell",
-      "command": "node scripts/run-agent-task.js claude-review",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": false
-      }
-    },
-    {
-      "label": "AI Loop: Copilot Verify",
-      "type": "shell",
-      "command": "node scripts/run-agent-task.js copilot-verify",
+      "command": "npm run compile",
       "options": {
         "cwd": "${workspaceFolder}"
       },

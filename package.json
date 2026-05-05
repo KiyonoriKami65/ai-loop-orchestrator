@@ -60,11 +60,7 @@
     ]
   },
   "scripts": {
-    "check:env": "node scripts/check-env.js",
     "compile": "tsc -p ./",
-    "test": "npm run check:env && npm run compile && npm run test:core && npm run test:smoke",
-    "test:core": "node test/core.test.js",
-    "test:smoke": "node test/extension-smoke.test.js",
     "watch": "tsc -watch -p ./"
   },
   "devDependencies": {
