@@ -35,7 +35,7 @@
 - `.ai-loop/state.json` による状態管理
 - ラウンドごとのプロンプト・レビュー・判定ファイル生成
 - Codex / Claude / Copilot の役割分担
-- テスト結果を `verdict.json` に反映
+- プロジェクト確認 task の終了結果を `verdict.json` に反映
 - 同一指摘の検出による無限ループ防止
 - 人間レビューへのエスカレーション
 - `final_report.md` 生成
@@ -160,7 +160,7 @@ npm run watch
 | `AI Loop: Run Codex` | Codex に現在ラウンドの実装を依頼 |
 | `AI Loop: Run Claude Review` | Claude Code にレビューを依頼 |
 | `AI Loop: Run Copilot Verify` | Copilot に動作確認を依頼 |
-| `AI Loop: Run Project Tests` | テストを実行して `verdict.tests` を更新 |
+| `AI Loop: Run Project Tests` | `AI Loop: Project Test` task を実行して `verdict.tests` を更新 |
 | `AI Loop: Next Round` | 継続 / 収束 / 人間レビューを判定 |
 | `AI Loop: Converge` | 最終レポートを生成 |
 | `AI Loop: Open Current Round Files` | 現在ラウンドの主要ファイルを開く |
@@ -198,7 +198,7 @@ AI Loop: Run Claude Review
 AI Loop: Run Copilot Verify
 ```
 
-### 5. テストを実行
+### 5. プロジェクト確認 task を実行
 
 ```text
 AI Loop: Run Project Tests
@@ -246,10 +246,10 @@ AI Loop: Converge
 - `codex` コマンドが通るか
 - `codex exec --help` が動くか
 
-### テストが `UNKNOWN` のまま
+### `verdict.tests` が `UNKNOWN` のまま
 
 - `.vscode/tasks.json` に `AI Loop: Project Test` があるか
-- `command` が正しいか
+- `AI Loop: Project Test` の `command` が、このプロジェクトで実行したい確認コマンドになっているか
 
 ### 同一指摘で止まる
 
