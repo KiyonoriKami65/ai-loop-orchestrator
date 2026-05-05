@@ -58,7 +58,6 @@ ai-loop-orchestrator/
 │  ├─ launch.json
 │  └─ tasks.json
 ├─ .ai-loop/
-│  ├─ spec.md
 │  ├─ state.json
 │  ├─ agents/
 │  │  ├─ codex.md
@@ -178,7 +177,7 @@ AI Loop: Start
 
 - `.ai-loop/` のテンプレートを準備
 - `state.json` を初期化
-- `spec.md` を作成 / 更新
+- `spec.md` を作成
 - ラウンド 001 を作成
 
 ### 2. Codex で実装
