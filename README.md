@@ -93,17 +93,28 @@ npm install
 
 ### 2. 拡張機能をコンパイル
 
+VS Code のメニューから **Terminal → New Terminal** を選ぶか、`` Ctrl+` `` を押してターミナルを開き、以下を実行します。
+
 ```bash
 npm run compile
 ```
+
+`out/extension.js` が生成されれば成功です。
 
 ### 3. このリポジトリを VS Code で開く
 
 ### 4. `F5` を押す
 
-`Run Extension` が起動し、拡張機能の開発用 VS Code ウィンドウが開きます。
+`Run Extension` が起動し、**Extension Development Host** という別の VS Code ウィンドウが開きます。
 
-### 5. 次の順番でコマンドを実行
+> このプロジェクト自身にループを使いたい場合は、開いた新ウィンドウで  
+> **File → Open Folder** から `ai-loop-orchestrator` フォルダを開いてください。
+
+### 5. コマンドパレットを開く
+
+新ウィンドウで `Ctrl+Shift+P` を押し、`AI Loop:` と入力するとコマンド一覧が表示されます。
+
+### 6. 次の順番でコマンドを実行
 
 ```text
 AI Loop: Start
