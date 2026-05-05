@@ -18,5 +18,6 @@ logs/
 tmp/
 temp/
 .cache/
+.claude/
 # .ai-loop/rounds/
 # .ai-loop/final/

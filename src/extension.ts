@@ -683,6 +683,10 @@ async function runCodex(): Promise<void> {
 
     const roundStr = String(state.round).padStart(3, "0");
     const promptPath = roundFile(state.round, "codex_prompt.md");
+    const targetInstruction =
+      state.round === 1
+        ? `Read .ai-loop/spec.md and .ai-loop/rounds/${roundStr}/codex_prompt.md. Implement only the initial spec requirements. Do not refactor unrelated parts.`
+        : `Read .ai-loop/spec.md and .ai-loop/rounds/${roundStr}/codex_prompt.md. Only fix issues described in the previous review. Do not refactor unrelated parts.`;
 
     await revealFiles([
       promptPath,
@@ -694,7 +698,7 @@ async function runCodex(): Promise<void> {
     const terminal = vscode.window.createTerminal("AI Loop Codex");
     terminal.show();
     terminal.sendText(
-      `codex exec "Read .ai-loop/spec.md and .ai-loop/rounds/${roundStr}/codex_prompt.md. Only fix issues described in the previous review. Do not refactor unrelated parts. Write results to .ai-loop/rounds/${roundStr}/codex_result.md and .ai-loop/rounds/${roundStr}/patch_summary.md."`
+      `codex exec "${targetInstruction} Write results to .ai-loop/rounds/${roundStr}/codex_result.md and .ai-loop/rounds/${roundStr}/patch_summary.md."`
     );
 
     vscode.window.showInformationMessage(

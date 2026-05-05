@@ -1,11 +1,11 @@
-# AI Loop Orchestrator v1.1
+# AI Loop Orchestrator v0.1.1
 
 > VS Code 上で **Codex / Claude Code / GitHub Copilot** を役割分担させ、  
 > **実装 → 批評 → 修正 → 動作確認 → 収束判定** のループをファイルベースで回す、最小構成のオーケストレータです。
 
 [![VS Code](https://img.shields.io/badge/VS%20Code-Extension-blue)](#)
 [![TypeScript](https://img.shields.io/badge/TypeScript-ES2022-3178c6)](#)
-[![状態](https://img.shields.io/badge/status-v1.1-informational)](#)
+[![状態](https://img.shields.io/badge/status-v0.1.1-informational)](#)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
 ---
