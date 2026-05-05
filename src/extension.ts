@@ -314,6 +314,13 @@ function buildCodexPrompt(round: number): string {
   const roundStr = String(round).padStart(3, "0");
   const prev = round > 1 ? String(round - 1).padStart(3, "0") : null;
 
+  const readSection = prev
+    ? `- .ai-loop/rounds/${prev}/claude_review.md\n- .ai-loop/rounds/${prev}/copilot_verify.md\n- .ai-loop/rounds/${prev}/verdict.json`
+    : "";
+  const fixTarget = prev
+    ? `- .ai-loop/rounds/${prev}/claude_review.md の "## Required Fixes"\n- .ai-loop/rounds/${prev}/copilot_verify.md の "## Micro Fix Suggestions"`
+    : "- 初回ラウンドでは spec.md の要求";
+
   return `# Codex Prompt
 
 あなたは実装担当です。
@@ -321,15 +328,12 @@ function buildCodexPrompt(round: number): string {
 読むもの:
 - .ai-loop/spec.md
 - .ai-loop/agents/codex.md
-${prev ? `- .ai-loop/rounds/${prev}/claude_review.md` : ""}
-${prev ? `- .ai-loop/rounds/${prev}/copilot_verify.md` : ""}
-${prev ? `- .ai-loop/rounds/${prev}/verdict.json` : ""}
+${readSection}
 
 # FIX TARGET
 
 必ず修正するもの:
-${prev ? `- .ai-loop/rounds/${prev}/claude_review.md の "## Required Fixes"` : "- 初回ラウンドでは spec.md の要求"}
-${prev ? `- .ai-loop/rounds/${prev}/copilot_verify.md の "## Micro Fix Suggestions"` : ""}
+${fixTarget}
 
 やってはいけない:
 - 指摘以外の変更

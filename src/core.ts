@@ -6,7 +6,6 @@ export type LoopState = {
   status: LoopStatus;
   maxRounds: number;
   converged: boolean;
-  openIssues: string[];
   lastVerdict: string;
   requiresHumanReview: boolean;
   stopReason: string;
@@ -32,7 +31,6 @@ export function defaultState(projectName: string): LoopState {
     status: "codex",
     maxRounds: 6,
     converged: false,
-    openIssues: [],
     lastVerdict: "PENDING",
     requiresHumanReview: false,
     stopReason: "",

@@ -14,11 +14,11 @@
 
 `AI Loop Orchestrator` は、複数の AI コーディング支援ツールを **チャット履歴ではなくファイルを介して連携** させるための VS Code 拡張テンプレートです。
 
-このテンプレートでは、以下の役割分担を前提にしています。
-
-- **Codex**: 実装担当
-- **Claude Code**: 厳しめのレビュー担当
-- **GitHub Copilot**: 動作確認・軽微修正担当
+| 役割 | ツール | 担当 |
+|---|---|---|
+| 実装 | Codex | コード修正・生成 |
+| 批評 | Claude Code | 仕様逸脱・バグ・エッジケースの指摘 |
+| 確認 | GitHub Copilot | 動作確認・微修正提案 |
 
 `.ai-loop/` 配下のファイルを共通インターフェースにすることで、次のことがやりやすくなります。
 
@@ -37,7 +37,7 @@
 - Codex / Claude / Copilot の役割分担
 - プロジェクト確認 task の終了結果を `verdict.json` に反映
 - 同一指摘の検出による無限ループ防止
-- 人間レビューへのエスカレーション
+- 人間レビューへのエスカレーション（最大 6 ラウンド）
 - `final_report.md` 生成
 
 ---
@@ -52,24 +52,33 @@ ai-loop-orchestrator/
 ├─ tsconfig.json
 ├─ .gitignore
 ├─ src/
-│  ├─ core.ts
-│  └─ extension.ts
+│  ├─ core.ts          # 収束判定・テキスト解析の純粋ロジック
+│  └─ extension.ts     # VS Code コマンド層
 ├─ .vscode/
 │  ├─ launch.json
 │  └─ tasks.json
 ├─ .ai-loop/
-│  ├─ state.json
-│  ├─ agents/
+│  ├─ state.json       # ループ状態
+│  ├─ spec.md          # 仕様（AI Loop: Start 後に編集）
+│  ├─ agents/          # 各 AI の役割定義（カスタマイズ可）
 │  │  ├─ codex.md
 │  │  ├─ claude.md
 │  │  └─ copilot.md
-│  ├─ rounds/
-│  │  └─ .gitkeep
+│  ├─ rounds/          # ラウンドごとの入出力ファイル
+│  │  └─ 001/
+│  │     ├─ codex_prompt.md
+│  │     ├─ codex_result.md
+│  │     ├─ claude_prompt.md
+│  │     ├─ claude_review.md
+│  │     ├─ copilot_prompt.md
+│  │     ├─ copilot_verify.md
+│  │     ├─ patch_summary.md
+│  │     └─ verdict.json
 │  └─ final/
-│     └─ .gitkeep
+│     ├─ final_report.md
+│     └─ convergence.json
 └─ docs/
    └─ images/
-      └─ .gitkeep
 ```
 
 ---
@@ -98,6 +107,7 @@ npm run compile
 
 ```text
 AI Loop: Start
+  → spec.md を編集してゴールと完了条件を記述する  ← 必須
 AI Loop: Run Codex
 AI Loop: Run Claude Review
 AI Loop: Run Copilot Verify
@@ -114,7 +124,7 @@ AI Loop: Converge
 
 - VS Code
 - Node.js / npm
-- Codex CLI が使える環境
+- Codex CLI が使える環境（`codex exec --help` が通ること）
 - Claude Code / GitHub Copilot を VS Code 上で利用できる環境
 
 ### 依存関係をインストール
@@ -143,12 +153,16 @@ npm run watch
 
 各ラウンドでは主に以下のファイルが使われます。
 
-- `codex_prompt.md`: Codex への実装依頼
-- `codex_result.md`: Codex の変更要約
-- `claude_review.md`: Claude のレビュー
-- `copilot_verify.md`: Copilot の確認結果
-- `patch_summary.md`: ラウンド要約
-- `verdict.json`: 判定状態
+| ファイル | 役割 |
+|---|---|
+| `codex_prompt.md` | Codex への実装依頼（自動生成） |
+| `codex_result.md` | Codex が書く変更要約 |
+| `claude_prompt.md` | Claude Code へのレビュー依頼（自動生成） |
+| `claude_review.md` | Claude が書くレビュー結果 |
+| `copilot_prompt.md` | Copilot への確認依頼（自動生成） |
+| `copilot_verify.md` | Copilot が書く確認結果 |
+| `patch_summary.md` | ラウンド要約 |
+| `verdict.json` | 判定状態 |
 
 ---
 
@@ -180,11 +194,16 @@ AI Loop: Start
 - `spec.md` を作成
 - ラウンド 001 を作成
 
+**開始後すぐに `.ai-loop/spec.md` を編集してください。**  
+`## Goal` にやりたいことを、`## Acceptance Criteria` に完了条件を書くと AI への指示が明確になります。
+
 ### 2. Codex で実装
 
 ```text
 AI Loop: Run Codex
 ```
+
+ターミナルに `codex exec` コマンドが送信されます。Codex が `codex_result.md` と `patch_summary.md` を埋めます。
 
 ### 3. Claude Code でレビュー
 
@@ -192,11 +211,17 @@ AI Loop: Run Codex
 AI Loop: Run Claude Review
 ```
 
+`claude_prompt.md` が開くので、Claude Code に読ませて `claude_review.md` と `verdict.json` を更新させます。  
+タスク `AI Loop: Claude Review` を設定すると自動化できます（後述）。
+
 ### 4. GitHub Copilot で確認
 
 ```text
 AI Loop: Run Copilot Verify
 ```
+
+`copilot_prompt.md` が開くので、Copilot に読ませて `copilot_verify.md` と `verdict.json` を更新させます。  
+タスク `AI Loop: Copilot Verify` を設定すると自動化できます（後述）。
 
 ### 5. プロジェクト確認 task を実行
 
@@ -218,6 +243,57 @@ AI Loop: Converge
 
 ---
 
+## エージェント設定のカスタマイズ
+
+`.ai-loop/agents/` 配下の Markdown ファイルが各 AI の役割定義です。  
+`AI Loop: Start` 実行時にデフォルト内容で生成されます。プロジェクトに合わせて自由に編集できます。
+
+| ファイル | カスタマイズ例 |
+|---|---|
+| `codex.md` | 命名規則、禁止ライブラリ、コーディング規約 |
+| `claude.md` | レビュー観点の追加、厳しさ加減の調整 |
+| `copilot.md` | ビルドコマンド、確認すべき実行パスの明示 |
+
+---
+
+## タスク自動化
+
+`.vscode/tasks.json` に以下のタスクを追加することで、レビュー・確認ステップを自動化できます。
+
+### Claude Review の自動化
+
+```json
+{
+  "label": "AI Loop: Claude Review",
+  "type": "shell",
+  "command": "claude -p \"$(cat .ai-loop/rounds/${ROUND}/claude_prompt.md)\""
+}
+```
+
+### Copilot Verify の自動化
+
+```json
+{
+  "label": "AI Loop: Copilot Verify",
+  "type": "shell",
+  "command": "..."
+}
+```
+
+### プロジェクトテストの設定
+
+```json
+{
+  "label": "AI Loop: Project Test",
+  "type": "shell",
+  "command": "npm test"
+}
+```
+
+`AI Loop: Run Project Tests` はこのタスクの終了コード (0 = PASS, 非0 = FAIL) を `verdict.json` に反映します。
+
+---
+
 ## 収束ルール
 
 以下をすべて満たした場合に「収束」と判定します。
@@ -229,7 +305,7 @@ AI Loop: Converge
 ### 人間レビューに移行する条件
 
 - 前ラウンドと同じ問題が繰り返された
-- 最大ラウンド数に達した
+- 最大ラウンド数（デフォルト: 6）に達した
 
 ---
 
