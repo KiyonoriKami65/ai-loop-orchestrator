@@ -48,7 +48,6 @@
 ai-loop-orchestrator/
 ├─ README.md
 ├─ LICENSE
-├─ CONTRIBUTING.md
 ├─ CODE_OF_CONDUCT.md
 ├─ SECURITY.md
 ├─ package.json
